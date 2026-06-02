@@ -9,32 +9,78 @@ A lightweight Python library for creating Project Network Diagrams (CPM/PERT), c
 
 - **Easy Node Management**: Add activities with durations and string-based predecessor lists (e.g., `"A,B"`).
 - **Automatic Pathfinding**: Detects all probable paths from Start to End.
-- **Visualisation**: Generates directed graphs with arrows and duration labels using `matplotlib`.
-- **CPM Ready**: Built on a node structure supporting Probable Paths, Critical Path.
+- **CPM Ready**: Built on a node structure supporting Probable Paths, Critical Path, and ES/EF/LS/LF attributes.
+- **Forward & Backward Pass**: Automatically calculates Early Start (ES), Early Finish (EF), Late Start (LS), and Late Finish (LF) for all nodes.
+- **Visualization**: Generates directed graphs with arrows and duration labels using `matplotlib`.
 
-# Publisher
+## Publisher
 - **Name**: Kathan Majithia
 - **Contact**: kathanmajithia@gmail.com
 
 ## Dependencies
 
 To use the visualization features, you must have the following libraries installed:
-
-* **networkx** (for graph theory and structure)
-* **matplotlib** (for plotting the diagram)
+- `networkx`
+- `matplotlib`
 
 ## Installation
-pip install networkdiagram
+
+You can install the package directly via pip:
 
 ```bash
+pip install networkdiagram
+```
 
+## Quick Start Guide
+
+Here is a complete example of how to use the `networkdiagram` library to build a Critical Path Method (CPM) diagram, calculate properties, and visualize the output.
+
+```python
 from networkdiagram import CriticalPathMethod
 
-cpm = CriticalPathMethodk()
+# 1. Initialize the CPM Network
+cpm = CriticalPathMethod()
 
-activities = ['A','B','C','D']
-durations = [2,5,4,2]
-predecessors = ['-','A','B','B,C']
+# 2. Define Activities
+activities = ['A', 'B', 'C', 'D']
+durations = [0, 2, 5, 4, 2]  # First duration is for Origin, subsequent durations are for activities
+predecessors = ['-', 'A', 'B', 'B,C']
 
-cpm.add_activity('O',0)
-cpm.add_activities_relations(activities,durations,predecessors)
+# 3. Add Origin and Activities to the Network
+cpm.add_activity('O', 0)
+cpm.add_activities_relations(activities, durations, predecessors)
+
+# 4. Perform Path Calculations
+cpm.find_probable_paths()
+cpm.find_critical_path()
+
+# 5. Calculate Early & Late Start/Finish (Forward & Backward Pass)
+cpm.forward_pass()
+cpm.backward_pass()
+
+# 6. Generate Network Summary
+cpm.network_summary()
+
+# 7. Visualize the Network
+# The critical path will be highlighted in red.
+cpm.get_edges()
+cpm.display_network()
+```
+
+## Accessing Node Properties
+
+After running the forward and backward passes, each activity node will have its CPM properties populated. You can access these programmatically:
+
+```python
+node_a = cpm.nodes['A']
+print(f"ES: {node_a.early_start}, EF: {node_a.early_finish}")
+print(f"LS: {node_a.latest_start}, LF: {node_a.latest_finish}")
+```
+
+## Contributing
+
+We welcome contributions! If you would like to contribute:
+1. Please read our [`CONTRIBUTING.md`](./CONTRIBUTING.md) for detailed guidelines.
+2. Ensure you are assigned to an issue before submitting a Pull Request.
+3. PRs must be submitted against the `main` branch.
+4. If modifying mathematical logic, please ensure you verify your algorithms against known project networks.
