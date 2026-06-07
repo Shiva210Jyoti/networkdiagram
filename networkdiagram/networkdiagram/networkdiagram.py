@@ -104,7 +104,7 @@ class CriticalPathMethod:
                 if cur in self.nodes:
                     self.nodes[cur].predecessors.append(p)
             
-    def find_probable_paths(self,cur=None,path=""):
+    def find_probable_paths(self,cur=None,path=None):
         """
         Function to find all probable paths
 
@@ -119,10 +119,14 @@ class CriticalPathMethod:
             else:
                 return
         
-        path +=  str(cur.name)
+        if path is None:
+            path = []
+        elif isinstance(path, str):
+            path = [p.strip() for p in path.split(',') if p.strip()]
+
+        path = path + [str(cur.name)]
             
         if len(cur.successors) == 0:
-            path = [p for p in path]
             self.probable_paths.append(path)
             return
         for c in cur.successors:
