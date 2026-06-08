@@ -3,19 +3,26 @@ import matplotlib.pyplot as plt
 from collections import deque
 
 class Node:
-    def __init__(self,name,duration=0):
+    def __init__(self, name, duration=0, normal_cost=0, crash_cost=0, crash_duration=None):
         """
         Constructor for declaring a new Node or Activity
 
         Args:
-            name (string): Name of the activity usually single character
-            duration (__type__, optional): Duration of the activity. Defaults to 0.
+            name (string): Name of the activity
+            duration (int): Normal duration. Defaults to 0.
+            normal_cost (float): Cost at normal duration. Defaults to 0.
+            crash_cost (float): Cost at minimum duration. Defaults to 0.
+            crash_duration (int): Minimum possible duration. Defaults to normal duration.
         """
         self.name = name
         self.duration = duration
+        self.normal_duration = duration
+        self.crash_duration = crash_duration if crash_duration is not None else duration
+        self.normal_cost = normal_cost
+        self.crash_cost = crash_cost
         self.predecessors = []
-        self.successors = [] # Tells which activities can start once the current activity is finished
-        self.early_start = self.early_finish = self.latest_start = self.latest_finish = 0 # Pending
+        self.successors = []
+        self.early_start = self.early_finish = self.latest_start = self.latest_finish = 0
         
     def add_successor(self,node):
         """
@@ -35,6 +42,29 @@ class Node:
             string: contains information like name, duration and successors.
         """
         return f"Name : {self.name}, Duration : {self.duration}, Successor : {self.successors}"
+    
+    def cost_slope(self):
+        """
+        Cost Slope = (Crash Cost - Normal Cost) / (Normal Duration - Crash Duration)
+        Tells how much extra it costs to reduce duration by 1 unit.
+        Returns infinity if activity cannot be crashed further.
+
+        Returns:
+            float: Cost per unit time reduction
+        """
+        if self.normal_duration <= self.crash_duration:
+            return float('inf')
+        return (self.crash_cost - self.normal_cost) / (self.normal_duration - self.crash_duration)
+
+    def can_be_crashed(self):
+        """
+        Checks if this activity can still be crashed.
+        Activity cannot go below its crash_duration.
+
+        Returns:
+            bool: True if current duration > crash_duration
+        """
+        return self.duration > self.crash_duration
         
 class CriticalPathMethod:
     """
@@ -51,16 +81,21 @@ class CriticalPathMethod:
         self.critical_path = [] # It is a probable path having the maximum completion time
         self.edges = [] # Tuple (from,to,duration)
         
-    def add_activity(self,name,duration):
+    def add_activity(self, name, duration, normal_cost=0, crash_cost=0, crash_duration=None):
         """
-        Function to add a single activity
+        Function to add a single activity with optional crashing parameters
 
         Args:
             name (string): Name or alias of the activity
-            duration (__type__): Duration of the activity
+            duration (int): Normal duration of the activity
+            normal_cost (float): Cost at normal duration. Defaults to 0.
+            crash_cost (float): Cost at crash duration. Defaults to 0.
+            crash_duration (int): Minimum possible duration. Defaults to normal duration.
         """
         if name not in self.nodes:
-            self.nodes[name] = Node(name,duration)
+            if crash_duration is None:
+                crash_duration = duration
+            self.nodes[name] = Node(name, duration, normal_cost, crash_cost, crash_duration)
             
     def add_activities_relations(self,activities,durations,predecessors):
         """
@@ -312,3 +347,151 @@ class CriticalPathMethod:
         print("-" * 35)
         for name, node in self.nodes.items():
             print(f"{name:<5} | {node.early_start:<3} | {node.early_finish:<3} | {node.latest_start:<3} | {node.latest_finish:<3}")
+
+    def get_critical_path_activities(self):
+        """
+        Returns activity names on the critical path, excluding origin (O) and terminal (T).
+        Handles both single critical path and multiple critical paths of equal duration.
+
+        Returns:
+            list: Activity names eligible for crashing
+        """
+        if not self.critical_path:
+            return []
+
+        activities = set()
+
+        for item in self.critical_path:
+            if isinstance(item, list):
+                # Multiple critical paths case — item is itself a path list
+                for act in item:
+                    if isinstance(act, str) and act in self.nodes and act not in ('O', 'T'):
+                        activities.add(act)
+            elif isinstance(item, str):
+                # Single critical path case — item is an activity name
+                if item in self.nodes and item not in ('O', 'T'):
+                    activities.add(item)
+
+        return list(activities)
+
+    def crash_project(self, target_duration):
+        """
+        Implements Time-Cost Trade-off (Crashing) Algorithm.
+
+        Steps:
+            1. Find critical path
+            2. Find critical path activity with minimum cost slope
+            3. Crash it by 1 time unit
+            4. Recalculate critical path
+            5. Repeat until target duration reached or no more crashing possible
+
+        Args:
+            target_duration (int): Desired project duration after crashing
+
+        Returns:
+            list: Crashing schedule — one dict per iteration
+        """
+        # Ensure paths are calculated before starting
+        self.forward_pass()
+        self.backward_pass()
+        self.find_probable_paths()
+        self.find_critical_path()
+
+        crash_schedule = []
+        total_extra_cost = 0
+        iteration = 0
+
+        print(f"\n{'='*60}")
+        print(f"  TIME-COST TRADE-OFF (CRASHING) ANALYSIS")
+        print(f"{'='*60}")
+        print(f"  Initial Project Duration : {self.total_project_duration} days")
+        print(f"  Target Duration          : {target_duration} days")
+        print(f"{'='*60}\n")
+
+        while self.total_project_duration > target_duration:
+
+            # Get crashable activities on critical path
+            critical_activities = self.get_critical_path_activities()
+            crashable = [
+                act for act in critical_activities
+                if self.nodes[act].can_be_crashed()
+            ]
+
+            if not crashable:
+                print("  No more activities can be crashed. Minimum duration reached.")
+                break
+
+            # Select activity with minimum cost slope — cheapest to speed up
+            best_activity = min(crashable, key=lambda act: self.nodes[act].cost_slope())
+            node = self.nodes[best_activity]
+            slope = node.cost_slope()
+
+            # Crash by 1 time unit
+            node.duration -= 1
+            total_extra_cost += slope
+            iteration += 1
+
+            # Recalculate after crashing
+            self.probable_paths = []
+            self.total_project_duration = -1
+            self.forward_pass()
+            self.backward_pass()
+            self.find_probable_paths()
+            self.find_critical_path()
+
+            # Record iteration
+            step = {
+                'iteration': iteration,
+                'activity_crashed': best_activity,
+                'new_duration': node.duration,
+                'cost_slope': round(slope, 2),
+                'total_extra_cost': round(total_extra_cost, 2),
+                'project_duration': self.total_project_duration,
+                'critical_path': list(self.critical_path)
+            }
+            crash_schedule.append(step)
+
+            print(f"  Iteration {iteration}:")
+            print(f"    Activity Crashed     : {best_activity}")
+            print(f"    New Duration         : {node.duration} days")
+            print(f"    Cost Slope           : {round(slope, 2)}")
+            print(f"    Total Extra Cost     : {round(total_extra_cost, 2)}")
+            print(f"    New Project Duration : {self.total_project_duration} days")
+            print(f"    Critical Path        : {' -> '.join(str(x) for x in self.critical_path)}")
+            print()
+
+        print(f"{'='*60}")
+        print(f"  CRASHING COMPLETE")
+        print(f"  Final Duration    : {self.total_project_duration} days")
+        print(f"  Total Extra Cost  : {round(total_extra_cost, 2)}")
+        print(f"{'='*60}\n")
+
+        return crash_schedule
+
+    def display_crash_schedule(self, crash_schedule):
+        """
+        Displays crashing schedule as a formatted table.
+
+        Args:
+            crash_schedule (list): Output from crash_project()
+        """
+        if not crash_schedule:
+            print("No crashing was performed.")
+            return
+
+        print(f"\n{'='*70}")
+        print(f"  CRASHING SCHEDULE")
+        print(f"{'='*70}")
+        print(f"  {'Iter':<6} {'Activity':<10} {'New Dur':<10} {'Cost Slope':<12} {'Total Cost':<12} {'Proj Dur'}")
+        print(f"  {'-'*60}")
+
+        for step in crash_schedule:
+            print(
+                f"  {step['iteration']:<6}"
+                f"{step['activity_crashed']:<10}"
+                f"{step['new_duration']:<10}"
+                f"{step['cost_slope']:<12}"
+                f"{step['total_extra_cost']:<12}"
+                f"{step['project_duration']}"
+            )
+        print(f"{'='*70}\n")
