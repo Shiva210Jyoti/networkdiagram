@@ -9,7 +9,7 @@ A lightweight Python library for creating Project Network Diagrams (CPM/PERT), c
 
 * **Easy Node Management**: Add activities with durations and string-based predecessor lists (e.g., `"A,B"`).
 * **Automatic Pathfinding**: Detects all probable paths from Start to End.
-* **CPM Ready**: Built on a node structure supporting Probable Paths, Critical Path, and ES/EF/LS/LF attributes.
+* **CPM Ready**: Built on a node structure supporting All Paths, Critical Path, and ES/EF/LS/LF attributes.
 * **Forward & Backward Pass**: Automatically calculates Early Start (ES), Early Finish (EF), Late Start (LS), and Late Finish (LF) for all nodes.
 * **Visualization**: Generates directed graphs with arrows and duration labels using `matplotlib`.
 
@@ -45,7 +45,7 @@ cpm = CriticalPathMethod()
 
 # 2. Define Activities
 activities = ['A', 'B', 'C', 'D']
-durations = [0, 2, 5, 4, 2]
+durations = [2, 5, 4, 2]
 predecessors = ['-', 'A', 'B', 'B,C']
 
 # 3. Add Origin and Activities to the Network
