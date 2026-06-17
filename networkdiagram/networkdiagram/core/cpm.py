@@ -1,55 +1,10 @@
-"""
-NetworkDiagram - A lightweight library for CPM/PERT project network diagrams.
-"""
+from typing import Dict, List, Optional, Tuple, Union
 
-from typing import Dict, List, Optional, Tuple, Union, Any, Set
-from collections import deque
 import networkx as nx
-import matplotlib.pyplot as plt
 
-
-class Node:
-    """Represents an activity node in the network diagram."""
-    
-    def __init__(self, name: str, duration: float = 0) -> None:
-        """
-        Constructor for declaring a new Node or Activity
-
-        Args:
-            name (str): Name of the activity usually single character
-            duration (float, optional): Duration of the activity. Defaults to 0.
-        """
-        self.name: str = name
-        self.duration: float = duration
-        self.predecessors: List[str] = []
-        self.successors: List[str] = []  # Tells which activities can start once the current activity is finished
-        self.early_start: float = 0
-        self.early_finish: float = 0
-        self.latest_start: float = 0
-        self.latest_finish: float = 0
-        
-    def add_successor(self, node: 'Node') -> None:
-        """
-        Used to add a successor of a specific activity
-
-        Args:
-            node (Node): Object of Node
-        """
-        self.successors.append(node.name)
-        node.predecessors.append(self.name)
-        
-    def node_summary(self) -> str:
-        """
-        Generates Summary report of an Activity
-
-        Returns:
-            str: contains information like name, duration and successors.
-        """
-        return f"Name : {self.name}, Duration : {self.duration}, Successor : {self.successors}"
-        
-    def __repr__(self) -> str:
-        """String representation of the node."""
-        return f"Node(name='{self.name}', duration={self.duration})"
+from networkdiagram.core.node import Node
+from networkdiagram.visualization.network_plot import display_network as _display_network
+from networkdiagram.visualization.network_plot import get_hierarchical_layout as _get_hierarchical_layout
 
 
 class CriticalPathMethod:
@@ -245,91 +200,14 @@ class CriticalPathMethod:
         Returns:
             Dict[str, Tuple[float, float]]: A dictionary of node positions {node: (x, y)}.
         """
-        pos: Dict[str, Tuple[float, float]] = {}
-        levels: Dict[str, int] = {}
-
-        # 1. Determine the level of each node using BFS
-        q: deque = deque([(start_node, 0)])
-        visited: Set[str] = {start_node}
-        levels[start_node] = 0
-
-        while q:
-            node, level = q.popleft()
-            neighbors = sorted(list(graph.neighbors(node)))  # Sort for consistent layout
-            for neighbor in neighbors:
-                if neighbor not in visited:
-                    visited.add(neighbor)
-                    levels[neighbor] = level + 1
-                    q.append((neighbor, level + 1))
-
-        # 2. Group nodes by level
-        nodes_by_level: Dict[int, List[str]] = {}
-        for node, level in levels.items():
-            if level not in nodes_by_level:
-                nodes_by_level[level] = []
-            nodes_by_level[level].append(node)
-
-        # 3. Assign x, y coordinates
-        for level, nodes in nodes_by_level.items():
-            num_nodes_in_level = len(nodes)
-            # Center the nodes vertically
-            y_start: float = - (num_nodes_in_level - 1) / 2
-
-            for i, node in enumerate(nodes):
-                pos[node] = (float(level), y_start + float(i))
-
-        return pos
+        return _get_hierarchical_layout(graph, start_node)
     
     def display_network(self) -> None:
         """
         Function to Visualize the Network Diagram.
         Uses Networkx and Matplotlib for plotting.
         """
-        self.get_edges()
-        
-        G = nx.Graph()
-        plt.figure(figsize=(10, 4))
-        
-        # Add edges without duration for graph creation
-        edges_without_duration: List[Tuple[str, str]] = [(e[0], e[1]) for e in self.edges]
-        G.add_edges_from(edges_without_duration)    
-        
-        color_edges: List[Tuple[str, str]] = []
-        if self.critical_path:
-            l = 'O'
-            for c in self.critical_path:
-                color_edges.append((l, c))
-                l = c
-            color_edges.append((self.critical_path[-1], 'T'))  
-        
-        # If the edge falls in critical path then color of edge will be red, else it will be black
-        edges_colors: List[str] = ['red' if (ed[0], ed[1]) in color_edges or (ed[1], ed[0]) in color_edges else 'black' for ed in G.edges()]
-        
-        initial_pos: Dict[str, Tuple[float, float]] = {'O': (0, 0), 'T': (10, 0)}
-        fixed_nodes: List[str] = ['O', 'T']
-
-        pos = self.get_hierarchical_layout(G, 'O')
-        
-        labels: Dict[str, str] = {}
-        for node in G.nodes():
-            if node in self.nodes:
-                n = self.nodes[node]
-                labels[node] = f"{node}\nES:{n.early_start} EF:{n.early_finish}\nLS:{n.latest_start} LF:{n.latest_finish}"
-            else:
-                labels[node] = str(node)
-        
-        nx.draw(G, pos, labels=labels, with_labels=True, node_size=2500, font_size=8, 
-                edge_color=edges_colors, arrows=True, arrowstyle='-|>', arrowsize=20)
-        
-        # Create edge label dictionary
-        edge_durations: Dict[Tuple[str, str], str] = {}
-        for edge in self.edges:
-            edge_durations[(edge[0], edge[1])] = str(edge[2]['duration'])
-        
-        nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_durations)
-
-        plt.title("Network diagram with critical Path")
-        plt.show()
+        _display_network(self)
 
     def network_summary(self) -> None:
         """
