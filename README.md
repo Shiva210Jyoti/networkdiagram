@@ -12,7 +12,6 @@ A lightweight Python library for creating Project Network Diagrams (CPM/PERT), c
 - **CPM Ready**: Built on a node structure supporting Probable Paths, Critical Path, and ES/EF/LS/LF attributes.
 - **Forward & Backward Pass**: Automatically calculates Early Start (ES), Early Finish (EF), Late Start (LS), and Late Finish (LF) for all nodes.
 - **Visualization**: Generates directed graphs with arrows and duration labels using `matplotlib`.
-- **Gantt Chart Support**: Generates Gantt chart visualizations of project schedules with critical paths and slack/float represented.
 
 ## Publisher
 - **Name**: Kathan Majithia

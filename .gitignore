@@ -1,6 +1,0 @@
-__pycache__/
-.vscode/
-*.egg-info/
-demo.py
-user_test.py
-gantt_chart_after.png
