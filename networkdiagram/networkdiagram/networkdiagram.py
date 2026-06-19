@@ -97,20 +97,27 @@ class CriticalPathMethod:
                 crash_duration = duration
             self.nodes[name] = Node(name, duration, normal_cost, crash_cost, crash_duration)
             
-    def add_activities_relations(self,activities,durations,predecessors):
+    def add_activities_relations(self, activities, durations, predecessors,
+                                normal_costs=None, crash_costs=None, crash_durations=None):
         """
-        Function to add multiple activities with its relation
+        Function to add multiple activities with their relations and optional crashing parameters
 
         Args:
-            activities (list): List of all activities
+            activities (list): List of all activity names
             durations (list): List of durations
             predecessors (list): List of predecessors
+            normal_costs (list, optional): Normal costs per activity. Defaults to None.
+            crash_costs (list, optional): Crash costs per activity. Defaults to None.
+            crash_durations (list, optional): Crash durations per activity. Defaults to None.
         """
-        
-        durations.append(0) # For the Terminal Node
-        for i in range(0,len(activities)):
-            self.add_activity(activities[i],durations[i+1])
-            self.add_relation(activities[i],predecessors[i])
+        durations.append(0)  # For the Terminal Node
+        for i in range(0, len(activities)):
+            nc = normal_costs[i] if normal_costs else 0
+            cc = crash_costs[i] if crash_costs else 0
+            cd = crash_durations[i] if crash_durations else None
+            self.add_activity(activities[i], durations[i+1], 
+                            normal_cost=nc, crash_cost=cc, crash_duration=cd)
+            self.add_relation(activities[i], predecessors[i])
             
     def add_relation(self,cur,predecessors):
         """
@@ -434,6 +441,7 @@ class CriticalPathMethod:
             # Recalculate after crashing
             self.probable_paths = []
             self.total_project_duration = -1
+            self.critical_path = [] 
             self.forward_pass()
             self.backward_pass()
             self.find_probable_paths()

@@ -8,37 +8,28 @@ from networkdiagram.networkdiagram import CriticalPathMethod
 
 
 def test_crashing():
-    """
-    Standard textbook crashing example.
-    Network: O -> A -> C -> E (critical path)
-             O -> B -> D
-    """
     cpm = CriticalPathMethod()
-
-    # Add origin node
     cpm.add_activity('O', 0)
 
-    # Add activities: duration, normal_cost, crash_cost, crash_duration
-    cpm.add_activity('A', 6, normal_cost=800,  crash_cost=1000, crash_duration=4)
-    cpm.add_activity('B', 4, normal_cost=500,  crash_cost=700,  crash_duration=2)
-    cpm.add_activity('C', 5, normal_cost=600,  crash_cost=900,  crash_duration=3)
-    cpm.add_activity('D', 3, normal_cost=400,  crash_cost=500,  crash_duration=2)
-    cpm.add_activity('E', 4, normal_cost=700,  crash_cost=1100, crash_duration=2)
+    activities      = ['A', 'B', 'C', 'D', 'E']
+    durations       = [0, 6, 4, 5, 3, 4]
+    predecessors    = ['-', '-', 'A', 'B', 'C']
+    normal_costs    = [800, 500, 600, 400, 700]
+    crash_costs     = [1000, 700, 900, 500, 1100]
+    crash_durations = [4, 2, 3, 2, 2]
 
-    # Add relations using existing method
-    cpm.add_relation('A', '-')   # A starts from origin
-    cpm.add_relation('B', '-')   # B starts from origin
-    cpm.add_relation('C', 'A')   # C follows A
-    cpm.add_relation('D', 'B')   # D follows B
-    cpm.add_relation('E', 'C')   # E follows C
+    cpm.add_activities_relations(
+        activities, durations, predecessors,
+        normal_costs=normal_costs,
+        crash_costs=crash_costs,
+        crash_durations=crash_durations
+    )
 
-    # Run crashing to target 13 days
     crash_schedule = cpm.crash_project(target_duration=13)
     cpm.display_crash_schedule(crash_schedule)
 
-    # Verify results
-    assert cpm.total_project_duration <= 13, "Target duration not reached"
-    assert len(crash_schedule) > 0, "No crashing iterations recorded"
+    assert cpm.total_project_duration <= 13
+    assert len(crash_schedule) > 0
     print("All tests passed!")
 
 
