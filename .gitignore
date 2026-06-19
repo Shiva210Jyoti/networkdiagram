@@ -1,0 +1,9 @@
+# Python Cache
+networkdiagram/networkdiagram/__pycache__/
+*.pyc
+.pytest_cache/
+
+# Build Files
+*.egg-info/
+networkdiagram/build/
+networkdiagram/dist/
