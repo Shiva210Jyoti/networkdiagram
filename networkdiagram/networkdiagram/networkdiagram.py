@@ -331,6 +331,89 @@ class CriticalPathMethod:
         plt.title("Network diagram with critical Path")
         plt.show()
 
+    def generate_gantt_chart(self, show: bool = True) -> None:
+        """
+        Function to Visualize the Project Schedule as a Gantt Chart.
+        Uses Matplotlib for plotting.
+        
+        Args:
+            show (bool): If True, displays the plot using plt.show(). Defaults to True.
+        """
+        if self.total_project_duration == -1:
+            self.find_probable_paths()
+            self.find_critical_path()
+            self.forward_pass()
+            self.backward_pass()
+            
+        if not self.nodes:
+            print("No activities to display in Gantt Chart.")
+            return
+
+        # Prepare data for plotting
+        activities = list(self.nodes.values())
+            
+        # Sort activities by early start, then by duration descending
+        activities.sort(key=lambda x: (x.early_start, -x.duration))
+        
+        names = [node.name for node in activities]
+        starts = [node.early_start for node in activities]
+        durations = [node.duration for node in activities]
+        
+        # Colors: red for critical path, light blue for others
+        colors = ['red' if node.name in self.critical_path else 'skyblue' for node in activities]
+        
+        fig, ax = plt.subplots(figsize=(10, max(4, len(activities) * 0.5)))
+        
+        # Y positions (reversed so earliest starts are at the top)
+        y_pos = list(range(len(activities)))
+        y_pos.reverse()
+        
+        # Plot slack/float
+        slack_plotted = False
+        for i, node in enumerate(activities):
+            y = y_pos[i]
+            slack = node.latest_finish - node.early_finish
+            if slack > 0:
+                label = 'Slack/Float' if not slack_plotted else ""
+                ax.barh(y, slack, left=node.early_finish, height=0.5, color='lightgray', hatch='//', edgecolor='gray', alpha=0.5, label=label)
+                slack_plotted = True
+        
+        # Plot main durations
+        ax.barh(y_pos, durations, left=starts, height=0.5, color=colors, edgecolor='black')
+        
+        # Plot zero duration milestones as diamonds
+        for i, node in enumerate(activities):
+            if node.duration == 0:
+                ax.plot(node.early_start, y_pos[i], marker='D', markersize=8, color=colors[i], markeredgecolor='black')
+        
+        # Labels and formatting
+        ax.set_yticks(y_pos)
+        ax.set_yticklabels(names)
+        ax.set_xlabel(f'Time ({self.duration_unit})')
+        ax.set_ylabel('Activities')
+        ax.set_title('Project Schedule - Gantt Chart')
+        ax.grid(True, axis='x', linestyle='--', alpha=0.7)
+        
+        # Create custom legend
+        from matplotlib.patches import Patch
+        from matplotlib.lines import Line2D
+        legend_elements = [
+            Patch(facecolor='red', edgecolor='black', label='Critical Activity'),
+            Patch(facecolor='skyblue', edgecolor='black', label='Normal Activity'),
+            Patch(facecolor='lightgray', edgecolor='gray', hatch='//', alpha=0.5, label='Slack/Float'),
+            Line2D([0], [0], marker='D', color='w', markerfacecolor='black', markersize=8, label='Milestone', linestyle='None')
+        ]
+        ax.legend(handles=legend_elements, loc='upper right')
+        
+        if self.total_project_duration > 0:
+            ax.set_xlim(0, self.total_project_duration * 1.05)
+            
+        plt.tight_layout()
+        
+        if show:
+            plt.show()
+
+
     def network_summary(self) -> None:
         """
         Function to generate entire Network Summary including number of nodes, Activities, 
@@ -383,3 +466,4 @@ if __name__ == "__main__":
     # Display results
     cpm.network_summary()
     cpm.display_network()
+    cpm.generate_gantt_chart()
