@@ -18,7 +18,16 @@ class Node:
         Args:
             name (str): Name of the activity usually single character
             duration (float, optional): Duration of the activity. Defaults to 0.
+            
+        Raises:
+            ValueError: If name is empty or duration is negative
         """
+        # Input validation for Node
+        if not name or not isinstance(name, str):
+            raise ValueError(f"Activity name must be a non-empty string. Got: {name}")
+        if duration < 0:
+            raise ValueError(f"Activity duration cannot be negative. Got: {duration}")
+            
         self.name: str = name
         self.duration: float = duration
         self.predecessors: List[str] = []
@@ -68,39 +77,198 @@ class CriticalPathMethod:
         self.critical_path: List[str] = []  # It is a probable path having the maximum completion time
         self.edges: List[Tuple[str, str, Dict[str, float]]] = []  # Tuple (from,to,duration)
         
+    def _validate_activity_name(self, name: str) -> None:
+        """
+        Validate activity name.
+        
+        Args:
+            name: Activity name to validate
+            
+        Raises:
+            ValueError: If name is empty or not a string
+        """
+        if not name or not isinstance(name, str):
+            raise ValueError(f"Activity name must be a non-empty string. Got: {name}")
+        if name.strip() == '':
+            raise ValueError("Activity name cannot be empty or whitespace only")
+            
+    def _validate_duration(self, duration: float, activity_name: str = "") -> None:
+        """
+        Validate activity duration.
+        
+        Args:
+            duration: Duration to validate
+            activity_name: Name of the activity (for error message)
+            
+        Raises:
+            ValueError: If duration is negative
+        """
+        if duration < 0:
+            msg = f"Activity duration cannot be negative. Got: {duration}"
+            if activity_name:
+                msg = f"Duration cannot be negative for activity '{activity_name}'. Got: {duration}"
+            raise ValueError(msg)
+            
+    def _validate_duplicate(self, name: str) -> None:
+        """
+        Check for duplicate activity names.
+        
+        Args:
+            name: Activity name to check
+            
+        Raises:
+            ValueError: If activity already exists
+        """
+        if name in self.nodes:
+            raise ValueError(f"Activity '{name}' already exists. Duplicate names are not allowed.")
+            
+    def _detect_cycles(self) -> None:
+        """
+        Detect circular dependencies in the network.
+        
+        Raises:
+            ValueError: If a circular dependency is detected
+        """
+        if not self.nodes:
+            return
+            
+        visited = set()
+        rec_stack = set()
+        
+        def dfs(node: str) -> None:
+            if node in rec_stack:
+                cycle_nodes = list(rec_stack) + [node]
+                raise ValueError(
+                    f"Circular dependency detected: {' -> '.join(cycle_nodes)}"
+                )
+            if node in visited:
+                return
+            
+            visited.add(node)
+            rec_stack.add(node)
+            
+            # Check all successors of this node
+            if node in self.nodes:
+                for successor in self.nodes[node].successors:
+                    dfs(successor)
+            
+            rec_stack.remove(node)
+        
+        # Run DFS from each node
+        for node in self.nodes:
+            if node not in visited:
+                dfs(node)
+        
     def add_activity(self, name: str, duration: float) -> None:
         """
-        Function to add a single activity
+        Function to add a single activity with validation.
 
         Args:
             name (str): Name or alias of the activity
             duration (float): Duration of the activity
+            
+        Raises:
+            ValueError: If name is invalid, duration is negative, or activity already exists
         """
+        # Validate inputs
+        self._validate_activity_name(name)
+        self._validate_duration(duration, name)
+        self._validate_duplicate(name)
+        
+        # Add the activity
         if name not in self.nodes:
             self.nodes[name] = Node(name, duration)
             
     def add_activities_relations(self, activities: List[str], durations: List[float], predecessors: List[str]) -> None:
         """
-        Function to add multiple activities with its relation
+        Function to add multiple activities with its relation and validation.
 
         Args:
             activities (list): List of all activities
             durations (list): List of durations
             predecessors (list): List of predecessors
+            
+        Raises:
+            ValueError: If lists are empty, have mismatched lengths, or contain invalid data
+            ValueError: If any activity name is invalid or duplicate
+            ValueError: If any predecessor references a non-existent activity
         """
-        durations.append(0)  # For the Terminal Node
+        # Validate activities list is not empty
+        if not activities:
+            raise ValueError("Activities list cannot be empty")
+            
+        # Validate lists have the same length (activities and durations)
+        if len(activities) != len(durations):
+            raise ValueError(
+                f"Activities list length ({len(activities)}) must match "
+                f"durations list length ({len(durations)})"
+            )
+            
+        # Validate all activities and durations first
+        all_valid_activities = set()
+        for i, (act, dur) in enumerate(zip(activities, durations)):
+            self._validate_activity_name(act)
+            self._validate_duration(dur, act)
+            self._validate_duplicate(act)
+            all_valid_activities.add(act)
+            
+        # Validate predecessors exist (check before adding)
+        for pred_list in predecessors:
+            if pred_list == '-' or pred_list == '':
+                continue
+            preds = [p.strip() for p in pred_list.split(',') if p.strip()]
+            for pred in preds:
+                # Check if predecessor exists in current nodes or will be added
+                if pred not in self.nodes and pred not in all_valid_activities:
+                    raise ValueError(
+                        f"Predecessor '{pred}' not found. "
+                        f"Make sure it exists or is added before being referenced."
+                    )
+                    
+        # Validate predecessors list length matches activities
+        if len(activities) != len(predecessors):
+            raise ValueError(
+                f"Activities list length ({len(activities)}) must match "
+                f"predecessors list length ({len(predecessors)})"
+            )
+            
+        # Now add all activities and relations
+        durations_with_origin = durations.copy()
+        durations_with_origin.append(0)  # For the Terminal Node
+        
         for i in range(len(activities)):
-            self.add_activity(activities[i], durations[i + 1])
+            # Add activity (validation already done, so skip duplicate check)
+            if activities[i] not in self.nodes:
+                self.nodes[activities[i]] = Node(activities[i], durations[i])
             self.add_relation(activities[i], predecessors[i])
             
     def add_relation(self, cur: str, predecessors: str) -> None:
         """
-        Function to add a relation of a single activity
+        Function to add a relation of a single activity with validation.
 
         Args:
             cur (str): Current Activity
             predecessors (str): Consist of predecessors separated by ',' in which of multiple Predecessors
+            
+        Raises:
+            ValueError: If current activity doesn't exist
+            ValueError: If any predecessor doesn't exist
         """
+        # Validate current activity exists
+        if cur not in self.nodes:
+            raise ValueError(f"Activity '{cur}' does not exist. Add it first.")
+            
+        # Validate predecessors
+        if predecessors and predecessors != '-':
+            preds = [p.strip() for p in predecessors.split(',') if p.strip()]
+            for p in preds:
+                if p != 'O' and p not in self.nodes:
+                    raise ValueError(
+                        f"Predecessor '{p}' does not exist. "
+                        f"Make sure it's added before creating the relation."
+                    )
+        
+        # Process each predecessor
         for p in predecessors.split(','):
             p = p.strip()
             
@@ -110,24 +278,34 @@ class CriticalPathMethod:
                 """
                 if 'O' in self.nodes:
                     parent = self.nodes['O']
-                    parent.successors.append(cur)
+                    if cur not in parent.successors:
+                        parent.successors.append(cur)
                 if cur in self.nodes:
-                    self.nodes[cur].predecessors.append('O')
+                    if 'O' not in self.nodes[cur].predecessors:
+                        self.nodes[cur].predecessors.append('O')
             
             elif p in self.nodes:
                 parent = self.nodes[p]
-                parent.successors.append(cur)
+                if cur not in parent.successors:
+                    parent.successors.append(cur)
                 if cur in self.nodes:
-                    self.nodes[cur].predecessors.append(p)
+                    if p not in self.nodes[cur].predecessors:
+                        self.nodes[cur].predecessors.append(p)
             
     def find_probable_paths(self, cur: Optional[str] = None, path: Optional[Union[str, List[str]]] = None) -> None:
         """
-        Function to find all probable paths
+        Function to find all probable paths with cycle detection.
 
         Args:
             cur (str, optional): Current Activity name. Defaults to None.
             path (Union[str, List[str]], optional): Path starting from origin to current activity. Defaults to None.
+            
+        Raises:
+            ValueError: If circular dependency is detected
         """
+        # Check for circular dependencies before finding paths
+        self._detect_cycles()
+        
         if cur is None:
             if 'O' in self.nodes:
                 cur = 'O'
@@ -166,7 +344,7 @@ class CriticalPathMethod:
         self.total_project_duration = -1
         
         for probable_path in self.probable_paths:
-            path_duration: float = sum(self.nodes[cur_node].duration for cur_node in probable_path)
+            path_duration: float = sum(self.nodes[cur_node].duration for cur_node in probable_path if cur_node in self.nodes)
             if path_duration > self.total_project_duration:
                 self.critical_path = probable_path
                 self.total_project_duration = path_duration
