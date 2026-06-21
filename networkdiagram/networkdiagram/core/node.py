@@ -11,7 +11,16 @@ class Node:
         Args:
             name (str): Name of the activity usually single character
             duration (float, optional): Duration of the activity. Defaults to 0.
+            
+        Raises:
+            ValueError: If name is empty or duration is negative
         """
+        # Input validation for Node
+        if not name or not isinstance(name, str):
+            raise ValueError(f"Activity name must be a non-empty string. Got: {name}")
+        if duration < 0:
+            raise ValueError(f"Activity duration cannot be negative. Got: {duration}")
+
         self.name: str = name
         self.duration: float = duration
         self.predecessors: List[str] = []
