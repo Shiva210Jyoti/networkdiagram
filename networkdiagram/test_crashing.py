@@ -12,7 +12,7 @@ def test_crashing():
     cpm.add_activity('O', 0)
 
     activities      = ['A', 'B', 'C', 'D', 'E']
-    durations       = [0, 6, 4, 5, 3, 4]
+    durations       = [6, 4, 5, 3, 4]
     predecessors    = ['-', '-', 'A', 'B', 'C']
     normal_costs    = [800, 500, 600, 400, 700]
     crash_costs     = [1000, 700, 900, 500, 1100]
