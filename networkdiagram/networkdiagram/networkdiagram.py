@@ -16,12 +16,21 @@ class Node:
         Constructor for declaring a new Node or Activity
 
         Args:
-            name (str): Name of the activity
-            duration (float): Normal duration. Defaults to 0.
+            name (str): Name of the activity usually single character
+            duration (float, optional): Normal duration of the activity. Defaults to 0.
             normal_cost (float): Cost at normal duration. Defaults to 0.
             crash_cost (float): Cost at minimum duration. Defaults to 0.
             crash_duration (float): Minimum possible duration. Defaults to normal duration.
+            
+        Raises:
+            ValueError: If name is empty or duration is negative
         """
+        # Input validation for Node
+        if not name or not isinstance(name, str):
+            raise ValueError(f"Activity name must be a non-empty string. Got: {name}")
+        if duration < 0:
+            raise ValueError(f"Activity duration cannot be negative. Got: {duration}")
+            
         self.name: str = name
         self.duration: float = duration
         self.normal_duration: float = duration
@@ -98,6 +107,44 @@ class CriticalPathMethod:
         self.critical_path: List[str] = []  # It is a probable path having the maximum completion time
         self.edges: List[Tuple[str, str, Dict[str, float]]] = []  # Tuple (from,to,duration)
         
+    def _validate_activity_name(self, name: str) -> None:
+        if not name or not isinstance(name, str):
+            raise ValueError(f"Activity name must be a non-empty string. Got: {name}")
+        if name.strip() == '':
+            raise ValueError("Activity name cannot be empty or whitespace only")
+            
+    def _validate_duration(self, duration: float, activity_name: str = "") -> None:
+        if duration < 0:
+            msg = f"Activity duration cannot be negative. Got: {duration}"
+            if activity_name:
+                msg = f"Duration cannot be negative for activity '{activity_name}'. Got: {duration}"
+            raise ValueError(msg)
+            
+    def _validate_duplicate(self, name: str) -> None:
+        if name in self.nodes:
+            raise ValueError(f"Activity '{name}' already exists. Duplicate names are not allowed.")
+            
+    def _detect_cycles(self) -> None:
+        if not self.nodes:
+            return
+        visited = set()
+        rec_stack = set()
+        def dfs(node: str) -> None:
+            if node in rec_stack:
+                cycle_nodes = list(rec_stack) + [node]
+                raise ValueError(f"Circular dependency detected: {' -> '.join(cycle_nodes)}")
+            if node in visited:
+                return
+            visited.add(node)
+            rec_stack.add(node)
+            if node in self.nodes:
+                for successor in self.nodes[node].successors:
+                    dfs(successor)
+            rec_stack.remove(node)
+        for node in self.nodes:
+            if node not in visited:
+                dfs(node)
+        
     def add_activity(self, name: str, duration: float, normal_cost: float = 0, crash_cost: float = 0, crash_duration: float = None) -> None:
         """
         Function to add a single activity with optional crashing parameters
@@ -108,11 +155,17 @@ class CriticalPathMethod:
             normal_cost (float): Cost at normal duration. Defaults to 0.
             crash_cost (float): Cost at crash duration. Defaults to 0.
             crash_duration (float): Minimum possible duration. Defaults to normal duration.
+            
+        Raises:
+            ValueError: If name is invalid, duration is negative, or activity already exists
         """
-        if name not in self.nodes:
-            if crash_duration is None:
-                crash_duration = duration
-            self.nodes[name] = Node(name, duration, normal_cost, crash_cost, crash_duration)
+        self._validate_activity_name(name)
+        self._validate_duration(duration, name)
+        self._validate_duplicate(name)
+        
+        if crash_duration is None:
+            crash_duration = duration
+        self.nodes[name] = Node(name, duration, normal_cost, crash_cost, crash_duration)
             
     def add_activities_relations(self, activities: List[str], durations: List[float], predecessors: List[str],
                                   normal_costs: List[float] = None, crash_costs: List[float] = None, crash_durations: List[float] = None) -> None:
@@ -126,24 +179,89 @@ class CriticalPathMethod:
             normal_costs (list, optional): Normal costs per activity. Defaults to None.
             crash_costs (list, optional): Crash costs per activity. Defaults to None.
             crash_durations (list, optional): Crash durations per activity. Defaults to None.
+            
+        Raises:
+            ValueError: If lists are empty, have mismatched lengths, or contain invalid data
+            ValueError: If any activity name is invalid or duplicate
+            ValueError: If any predecessor references a non-existent activity
         """
-        durations.append(0)  # For the Terminal Node
+        # Validate activities list is not empty
+        if not activities:
+            raise ValueError("Activities list cannot be empty")
+            
+        # Validate lists have the same length (activities and durations)
+        if len(activities) != len(durations):
+            raise ValueError(
+                f"Activities list length ({len(activities)}) must match "
+                f"durations list length ({len(durations)})"
+            )
+            
+        # Validate all activities and durations first
+        all_valid_activities = set()
+        for i, (act, dur) in enumerate(zip(activities, durations)):
+            self._validate_activity_name(act)
+            self._validate_duration(dur, act)
+            self._validate_duplicate(act)
+            all_valid_activities.add(act)
+            
+        # Validate predecessors exist (check before adding)
+        for pred_list in predecessors:
+            if pred_list == '-' or pred_list == '':
+                continue
+            preds = [p.strip() for p in pred_list.split(',') if p.strip()]
+            for pred in preds:
+                # Check if predecessor exists in current nodes or will be added
+                if pred not in self.nodes and pred not in all_valid_activities:
+                    raise ValueError(
+                        f"Predecessor '{pred}' not found. "
+                        f"Make sure it exists or is added before being referenced."
+                    )
+                    
+        # Validate predecessors list length matches activities
+        if len(activities) != len(predecessors):
+            raise ValueError(
+                f"Activities list length ({len(activities)}) must match "
+                f"predecessors list length ({len(predecessors)})"
+            )
+            
+        # Now add all activities and relations
+        durations_with_origin = [0] + list(durations) + [0]
+        
         for i in range(len(activities)):
             nc = normal_costs[i] if normal_costs else 0
             cc = crash_costs[i] if crash_costs else 0
             cd = crash_durations[i] if crash_durations else None
-            self.add_activity(activities[i], durations[i + 1],
+            self.add_activity(activities[i], durations_with_origin[i + 1],
                               normal_cost=nc, crash_cost=cc, crash_duration=cd)
             self.add_relation(activities[i], predecessors[i])
             
     def add_relation(self, cur: str, predecessors: str) -> None:
         """
-        Function to add a relation of a single activity
+        Function to add a relation of a single activity with validation.
 
         Args:
             cur (str): Current Activity
             predecessors (str): Consist of predecessors separated by ',' in which of multiple Predecessors
+            
+        Raises:
+            ValueError: If current activity doesn't exist
+            ValueError: If any predecessor doesn't exist
         """
+        # Validate current activity exists
+        if cur not in self.nodes:
+            raise ValueError(f"Activity '{cur}' does not exist. Add it first.")
+            
+        # Validate predecessors
+        if predecessors and predecessors != '-':
+            preds = [p.strip() for p in predecessors.split(',') if p.strip()]
+            for p in preds:
+                if p != 'O' and p not in self.nodes:
+                    raise ValueError(
+                        f"Predecessor '{p}' does not exist. "
+                        f"Make sure it's added before creating the relation."
+                    )
+        
+        # Process each predecessor
         for p in predecessors.split(','):
             p = p.strip()
             
@@ -153,24 +271,34 @@ class CriticalPathMethod:
                 """
                 if 'O' in self.nodes:
                     parent = self.nodes['O']
-                    parent.successors.append(cur)
+                    if cur not in parent.successors:
+                        parent.successors.append(cur)
                 if cur in self.nodes:
-                    self.nodes[cur].predecessors.append('O')
+                    if 'O' not in self.nodes[cur].predecessors:
+                        self.nodes[cur].predecessors.append('O')
             
             elif p in self.nodes:
                 parent = self.nodes[p]
-                parent.successors.append(cur)
+                if cur not in parent.successors:
+                    parent.successors.append(cur)
                 if cur in self.nodes:
-                    self.nodes[cur].predecessors.append(p)
+                    if p not in self.nodes[cur].predecessors:
+                        self.nodes[cur].predecessors.append(p)
             
     def find_probable_paths(self, cur: Optional[str] = None, path: Optional[Union[str, List[str]]] = None) -> None:
         """
-        Function to find all probable paths
+        Function to find all probable paths with cycle detection.
 
         Args:
             cur (str, optional): Current Activity name. Defaults to None.
             path (Union[str, List[str]], optional): Path starting from origin to current activity. Defaults to None.
+            
+        Raises:
+            ValueError: If circular dependency is detected
         """
+        # Check for circular dependencies before finding paths
+        self._detect_cycles()
+        
         if cur is None:
             if 'O' in self.nodes:
                 cur = 'O'
@@ -209,7 +337,7 @@ class CriticalPathMethod:
         self.total_project_duration = -1
         
         for probable_path in self.probable_paths:
-            path_duration: float = sum(self.nodes[cur_node].duration for cur_node in probable_path)
+            path_duration: float = sum(self.nodes[cur_node].duration for cur_node in probable_path if cur_node in self.nodes)
             if path_duration > self.total_project_duration:
                 self.critical_path = probable_path
                 self.total_project_duration = path_duration
@@ -374,6 +502,89 @@ class CriticalPathMethod:
         plt.title("Network diagram with critical Path")
         plt.show()
 
+    def generate_gantt_chart(self, show: bool = True) -> None:
+        """
+        Function to Visualize the Project Schedule as a Gantt Chart.
+        Uses Matplotlib for plotting.
+        
+        Args:
+            show (bool): If True, displays the plot using plt.show(). Defaults to True.
+        """
+        if self.total_project_duration == -1:
+            self.find_probable_paths()
+            self.find_critical_path()
+            self.forward_pass()
+            self.backward_pass()
+            
+        if not self.nodes:
+            print("No activities to display in Gantt Chart.")
+            return
+
+        # Prepare data for plotting
+        activities = list(self.nodes.values())
+            
+        # Sort activities by early start, then by duration descending
+        activities.sort(key=lambda x: (x.early_start, -x.duration))
+        
+        names = [node.name for node in activities]
+        starts = [node.early_start for node in activities]
+        durations = [node.duration for node in activities]
+        
+        # Colors: red for critical path, light blue for others
+        colors = ['red' if node.name in self.critical_path else 'skyblue' for node in activities]
+        
+        fig, ax = plt.subplots(figsize=(10, max(4, len(activities) * 0.5)))
+        
+        # Y positions (reversed so earliest starts are at the top)
+        y_pos = list(range(len(activities)))
+        y_pos.reverse()
+        
+        # Plot slack/float
+        slack_plotted = False
+        for i, node in enumerate(activities):
+            y = y_pos[i]
+            slack = node.latest_finish - node.early_finish
+            if slack > 0:
+                label = 'Slack/Float' if not slack_plotted else ""
+                ax.barh(y, slack, left=node.early_finish, height=0.5, color='lightgray', hatch='//', edgecolor='gray', alpha=0.5, label=label)
+                slack_plotted = True
+        
+        # Plot main durations
+        ax.barh(y_pos, durations, left=starts, height=0.5, color=colors, edgecolor='black')
+        
+        # Plot zero duration milestones as diamonds
+        for i, node in enumerate(activities):
+            if node.duration == 0:
+                ax.plot(node.early_start, y_pos[i], marker='D', markersize=8, color=colors[i], markeredgecolor='black')
+        
+        # Labels and formatting
+        ax.set_yticks(y_pos)
+        ax.set_yticklabels(names)
+        ax.set_xlabel(f'Time ({self.duration_unit})')
+        ax.set_ylabel('Activities')
+        ax.set_title('Project Schedule - Gantt Chart')
+        ax.grid(True, axis='x', linestyle='--', alpha=0.7)
+        
+        # Create custom legend
+        from matplotlib.patches import Patch
+        from matplotlib.lines import Line2D
+        legend_elements = [
+            Patch(facecolor='red', edgecolor='black', label='Critical Activity'),
+            Patch(facecolor='skyblue', edgecolor='black', label='Normal Activity'),
+            Patch(facecolor='lightgray', edgecolor='gray', hatch='//', alpha=0.5, label='Slack/Float'),
+            Line2D([0], [0], marker='D', color='w', markerfacecolor='black', markersize=8, label='Milestone', linestyle='None')
+        ]
+        ax.legend(handles=legend_elements, loc='upper right')
+        
+        if self.total_project_duration > 0:
+            ax.set_xlim(0, self.total_project_duration * 1.05)
+            
+        plt.tight_layout()
+        
+        if show:
+            plt.show()
+
+
     def network_summary(self) -> None:
         """
         Function to generate entire Network Summary including number of nodes, Activities, 
@@ -516,7 +727,7 @@ class CriticalPathMethod:
 
     def display_crash_schedule(self, crash_schedule):
         """
-        Displays crashing schedule as a formatted table.
+        Displays crashing schedule as a formatted table with aligned columns.
 
         Args:
             crash_schedule (list): Output from crash_project()
@@ -525,22 +736,32 @@ class CriticalPathMethod:
             print("No crashing was performed.")
             return
 
-        print(f"\n{'='*70}")
+        col1, col2, col3, col4, col5, col6 = 6, 12, 10, 12, 12, 10
+        total_width = col1 + col2 + col3 + col4 + col5 + col6 + 5
+
+        print(f"\n{'='*total_width}")
         print(f"  CRASHING SCHEDULE")
-        print(f"{'='*70}")
-        print(f"  {'Iter':<6} {'Activity':<10} {'New Dur':<10} {'Cost Slope':<12} {'Total Cost':<12} {'Proj Dur'}")
-        print(f"  {'-'*60}")
+        print(f"{'='*total_width}")
+        print(
+            f"  {'Iter':<{col1}}"
+            f"{'Activity':<{col2}}"
+            f"{'New Dur':<{col3}}"
+            f"{'Cost Slope':<{col4}}"
+            f"{'Total Cost':<{col5}}"
+            f"{'Proj Dur':<{col6}}"
+        )
+        print(f"  {'-'*total_width}")
 
         for step in crash_schedule:
             print(
-                f"  {step['iteration']:<6}"
-                f"{step['activity_crashed']:<10}"
-                f"{step['new_duration']:<10}"
-                f"{step['cost_slope']:<12}"
-                f"{step['total_extra_cost']:<12}"
-                f"{step['project_duration']}"
+                f"  {step['iteration']:<{col1}}"
+                f"{step['activity_crashed']:<{col2}}"
+                f"{step['new_duration']:<{col3}}"
+                f"{step['cost_slope']:<{col4}}"
+                f"{step['total_extra_cost']:<{col5}}"
+                f"{step['project_duration']:<{col6}}"
             )
-        print(f"{'='*70}\n")
+        print(f"{'='*total_width}\n")
 
 
 # Example usage
@@ -550,7 +771,7 @@ if __name__ == "__main__":
     cpm.add_activity('O', 0)
     
     activities      = ['A', 'B', 'C', 'D', 'E']
-    durations       = [0, 6, 4, 5, 3, 4]
+    durations       = [6, 4, 5, 3, 4]
     predecessors    = ['-', '-', 'A', 'B', 'C']
     normal_costs    = [800, 500, 600, 400, 700]
     crash_costs     = [1000, 700, 900, 500, 1100]
@@ -565,3 +786,7 @@ if __name__ == "__main__":
     
     crash_schedule = cpm.crash_project(target_duration=13)
     cpm.display_crash_schedule(crash_schedule)
+    # Display results
+    cpm.network_summary()
+    cpm.display_network()
+    cpm.generate_gantt_chart()

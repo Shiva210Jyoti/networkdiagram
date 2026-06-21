@@ -196,6 +196,12 @@ We welcome contributions!
 3. PRs must be submitted against the `main` branch.
 4. If modifying mathematical logic, please ensure you verify your algorithms against known project networks.
 
+## 👥 Contributors
+
+Thanks to all contributors ❤️
+
+[![Contributors](https://contrib.rocks/image?repo=kathan-majithia/networkdiagram)](https://github.com/kathan-majithia/networkdiagram/graphs/contributors)
+
 ## License
 
 This project is licensed under the MIT License.
